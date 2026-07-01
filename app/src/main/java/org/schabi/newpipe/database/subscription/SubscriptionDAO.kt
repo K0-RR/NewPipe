@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.RewriteQueriesToDropUnusedColumns
 import androidx.room.Transaction
 import io.reactivex.rxjava3.core.Flowable
 import io.reactivex.rxjava3.core.Maybe
@@ -31,6 +32,7 @@ abstract class SubscriptionDAO : BasicDAO<SubscriptionEntity> {
     )
     abstract fun getSubscriptionsFiltered(filter: String): Flowable<List<SubscriptionEntity>>
 
+    @RewriteQueriesToDropUnusedColumns
     @Query(
         """
         SELECT * FROM subscriptions s
@@ -47,6 +49,7 @@ abstract class SubscriptionDAO : BasicDAO<SubscriptionEntity> {
         currentGroupId: Long
     ): Flowable<List<SubscriptionEntity>>
 
+    @RewriteQueriesToDropUnusedColumns
     @Query(
         """
         SELECT * FROM subscriptions s
@@ -96,8 +99,8 @@ abstract class SubscriptionDAO : BasicDAO<SubscriptionEntity> {
             if (uidFromInsert != -1L) {
                 entity.uid = uidFromInsert
             } else {
-                val subscriptionIdFromDb = getSubscriptionIdInternal(entity.serviceId, entity.url)
-                    ?: throw IllegalStateException("Subscription cannot be null just after insertion.")
+                val subscriptionIdFromDb = getSubscriptionIdInternal(entity.serviceId, entity.url!!)
+                    ?: error("Subscription cannot be null just after insertion.")
                 entity.uid = subscriptionIdFromDb
 
                 update(entity)

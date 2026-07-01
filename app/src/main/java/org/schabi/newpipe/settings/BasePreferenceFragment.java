@@ -18,7 +18,7 @@ import java.util.Objects;
 
 public abstract class BasePreferenceFragment extends PreferenceFragmentCompat {
     protected final String TAG = getClass().getSimpleName() + "@" + Integer.toHexString(hashCode());
-    protected final boolean DEBUG = MainActivity.DEBUG;
+    protected static final boolean DEBUG = MainActivity.DEBUG;
 
     SharedPreferences defaultPreferences;
 
@@ -26,6 +26,11 @@ public abstract class BasePreferenceFragment extends PreferenceFragmentCompat {
     public void onCreate(@Nullable final Bundle savedInstanceState) {
         defaultPreferences = PreferenceManager.getDefaultSharedPreferences(requireActivity());
         super.onCreate(savedInstanceState);
+    }
+
+    protected void addPreferencesFromResourceRegistry() {
+        addPreferencesFromResource(
+                SettingsResourceRegistry.getInstance().getPreferencesResId(this.getClass()));
     }
 
     @Override
@@ -43,8 +48,8 @@ public abstract class BasePreferenceFragment extends PreferenceFragmentCompat {
     }
 
     @NonNull
-    public final Preference requirePreference(@StringRes final int resId) {
-        final Preference preference = findPreference(getString(resId));
+    public final <T extends Preference> T requirePreference(@StringRes final int resId) {
+        final T preference = findPreference(getString(resId));
         Objects.requireNonNull(preference);
         return preference;
     }

@@ -32,6 +32,7 @@ import com.nononsenseapps.filepicker.Utils;
 
 import org.schabi.newpipe.R;
 import org.schabi.newpipe.settings.NewPipeSettings;
+import org.schabi.newpipe.streams.io.NoFileManagerSafeGuard;
 import org.schabi.newpipe.streams.io.StoredFileHelper;
 import org.schabi.newpipe.util.FilePickerActivityHelper;
 
@@ -46,6 +47,7 @@ import us.shandian.giga.ui.adapter.MissionAdapter;
 
 public class MissionsFragment extends Fragment {
 
+    private static final String TAG = "MissionsFragment";
     private static final int SPAN_SIZE = 2;
 
     private SharedPreferences mPrefs;
@@ -184,30 +186,48 @@ public class MissionsFragment extends Fragment {
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
-            case R.id.switch_mode:
-                mLinear = !mLinear;
-                updateList();
-                return true;
-            case R.id.clear_list:
-                AlertDialog.Builder prompt = new AlertDialog.Builder(mContext);
-                prompt.setTitle(R.string.clear_download_history);
-                prompt.setMessage(R.string.confirm_prompt);
-                // Intentionally misusing button's purpose in order to achieve good order
-                prompt.setNegativeButton(R.string.clear_download_history, (dialog, which) -> mAdapter.clearFinishedDownloads(false));
-                prompt.setPositiveButton(R.string.delete_downloaded_files, (dialog, which) -> mAdapter.clearFinishedDownloads(true));
-                prompt.setNeutralButton(R.string.cancel, null);
-                prompt.create().show();
-                return true;
-            case R.id.start_downloads:
-                mBinder.getDownloadManager().startAllMissions();
-                return true;
-            case R.id.pause_downloads:
-                mBinder.getDownloadManager().pauseAllMissions(false);
-                mAdapter.refreshMissionItems();// update items view
-            default:
-                return super.onOptionsItemSelected(item);
+        int itemId = item.getItemId();
+        if (itemId == R.id.switch_mode) {
+            mLinear = !mLinear;
+            updateList();
+            return true;
+        } else if (itemId == R.id.clear_list) {
+            showClearDownloadHistoryPrompt();
+            return true;
+        } else if (itemId == R.id.start_downloads) {
+            mBinder.getDownloadManager().startAllMissions();
+            return true;
+        } else if (itemId == R.id.pause_downloads) {
+            mBinder.getDownloadManager().pauseAllMissions(false);
+            mAdapter.refreshMissionItems();// update items view
+
+            return super.onOptionsItemSelected(item);
         }
+        return super.onOptionsItemSelected(item);
+    }
+
+    public void showClearDownloadHistoryPrompt() {
+        // ask the user whether he wants to just clear history or instead delete files on disk
+        new AlertDialog.Builder(mContext)
+                .setTitle(R.string.clear_download_history)
+                .setMessage(R.string.confirm_prompt)
+                // Intentionally misusing buttons' purpose in order to achieve good order
+                .setNegativeButton(R.string.clear_download_history, (dialog, which) ->
+                        mAdapter.clearFinishedDownloads(false))
+                .setNeutralButton(R.string.cancel, null)
+                .setPositiveButton(R.string.delete_downloaded_files, (dialog, which) ->
+                        showDeleteDownloadedFilesConfirmationPrompt())
+                .show();
+    }
+
+    public void showDeleteDownloadedFilesConfirmationPrompt() {
+        // make sure the user confirms once more before deleting files on disk
+        new AlertDialog.Builder(mContext)
+                .setTitle(R.string.delete_downloaded_files_confirm)
+                .setNegativeButton(R.string.cancel, null)
+                .setPositiveButton(R.string.ok, (dialog, which) ->
+                        mAdapter.clearFinishedDownloads(true))
+                .show();
     }
 
     private void updateList() {
@@ -257,9 +277,13 @@ public class MissionsFragment extends Fragment {
             initialPath = Uri.parse(initialSavePath.getAbsolutePath());
         }
 
-        requestDownloadSaveAsLauncher.launch(
+        NoFileManagerSafeGuard.launchSafe(
+                requestDownloadSaveAsLauncher,
                 StoredFileHelper.getNewPicker(mContext, mission.storage.getName(),
-                        mission.storage.getType(), initialPath));
+                        mission.storage.getType(), initialPath),
+                TAG,
+                mContext
+        );
     }
 
     @Override

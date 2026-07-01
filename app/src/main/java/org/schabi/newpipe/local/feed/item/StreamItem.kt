@@ -6,6 +6,8 @@ import android.view.View
 import androidx.core.content.ContextCompat
 import androidx.preference.PreferenceManager
 import com.xwray.groupie.viewbinding.BindableItem
+import java.util.concurrent.TimeUnit
+import java.util.function.Consumer
 import org.schabi.newpipe.MainActivity
 import org.schabi.newpipe.R
 import org.schabi.newpipe.database.stream.StreamWithState
@@ -14,10 +16,12 @@ import org.schabi.newpipe.databinding.ListStreamItemBinding
 import org.schabi.newpipe.extractor.stream.StreamType.AUDIO_LIVE_STREAM
 import org.schabi.newpipe.extractor.stream.StreamType.AUDIO_STREAM
 import org.schabi.newpipe.extractor.stream.StreamType.LIVE_STREAM
+import org.schabi.newpipe.extractor.stream.StreamType.POST_LIVE_AUDIO_STREAM
+import org.schabi.newpipe.extractor.stream.StreamType.POST_LIVE_STREAM
 import org.schabi.newpipe.extractor.stream.StreamType.VIDEO_STREAM
 import org.schabi.newpipe.util.Localization
-import org.schabi.newpipe.util.PicassoHelper
-import java.util.concurrent.TimeUnit
+import org.schabi.newpipe.util.StreamTypeUtil
+import org.schabi.newpipe.util.image.CoilHelper
 
 data class StreamItem(
     val streamWithState: StreamWithState,
@@ -30,14 +34,21 @@ data class StreamItem(
     private val stream: StreamEntity = streamWithState.stream
     private val stateProgressTime: Long? = streamWithState.stateProgressMillis
 
+    /**
+     * Will be executed at the end of the [StreamItem.bind] (with (ListStreamItemBinding,Int)).
+     * Can be used e.g. for highlighting a item.
+     */
+    var execBindEnd: Consumer<ListStreamItemBinding>? = null
+
     override fun getId(): Long = stream.uid
 
-    enum class ItemVersion { NORMAL, MINI, GRID }
+    enum class ItemVersion { NORMAL, MINI, GRID, CARD }
 
     override fun getLayout(): Int = when (itemVersion) {
         ItemVersion.NORMAL -> R.layout.list_stream_item
         ItemVersion.MINI -> R.layout.list_stream_mini_item
         ItemVersion.GRID -> R.layout.list_stream_grid_item
+        ItemVersion.CARD -> R.layout.list_stream_card_item
     }
 
     override fun initializeViewBinding(view: View) = ListStreamItemBinding.bind(view)
@@ -58,8 +69,6 @@ data class StreamItem(
         viewBinding.itemVideoTitleView.text = stream.title
         viewBinding.itemUploaderView.text = stream.uploader
 
-        val isLiveStream = stream.streamType == LIVE_STREAM || stream.streamType == AUDIO_LIVE_STREAM
-
         if (stream.duration > 0) {
             viewBinding.itemDurationView.text = Localization.getDurationString(stream.duration)
             viewBinding.itemDurationView.setBackgroundColor(
@@ -77,7 +86,7 @@ data class StreamItem(
             } else {
                 viewBinding.itemProgressView.visibility = View.GONE
             }
-        } else if (isLiveStream) {
+        } else if (StreamTypeUtil.isLiveStream(stream.streamType)) {
             viewBinding.itemDurationView.setText(R.string.duration_live)
             viewBinding.itemDurationView.setBackgroundColor(
                 ContextCompat.getColor(
@@ -92,16 +101,18 @@ data class StreamItem(
             viewBinding.itemProgressView.visibility = View.GONE
         }
 
-        PicassoHelper.loadThumbnail(stream.thumbnailUrl).into(viewBinding.itemThumbnailView)
+        CoilHelper.loadThumbnail(viewBinding.itemThumbnailView, stream.thumbnailUrl)
 
         if (itemVersion != ItemVersion.MINI) {
             viewBinding.itemAdditionalDetails.text =
                 getStreamInfoDetailLine(viewBinding.itemAdditionalDetails.context)
         }
+
+        execBindEnd?.accept(viewBinding)
     }
 
     override fun isLongClickable() = when (stream.streamType) {
-        AUDIO_STREAM, VIDEO_STREAM, LIVE_STREAM, AUDIO_LIVE_STREAM -> true
+        AUDIO_STREAM, VIDEO_STREAM, LIVE_STREAM, AUDIO_LIVE_STREAM, POST_LIVE_STREAM, POST_LIVE_AUDIO_STREAM -> true
         else -> false
     }
 
@@ -121,6 +132,7 @@ data class StreamItem(
                 viewsAndDate.isEmpty() -> uploadDate!!
                 else -> Localization.concatenateStrings(viewsAndDate, uploadDate)
             }
+
             else -> viewsAndDate
         }
     }
